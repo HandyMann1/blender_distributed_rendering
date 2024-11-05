@@ -35,8 +35,8 @@ def browse_files():
         title="Select a .blend file",
         filetypes=(("Blend files", "*.blend"), ("All files", "*.*"))
     )
-    blend_file_path_entry.delete(0, tk.END)  # Clear current entry
-    blend_file_path_entry.insert(0, filename)  # Insert selected file path
+    blend_file_path_entry.delete(0, tk.END)
+    blend_file_path_entry.insert(0, filename)
 
 
 def on_upload():
@@ -53,7 +53,7 @@ def on_upload():
             messagebox.showwarning("Warning", "Start frame must be less than or equal to end frame.")
             return
 
-        pack_blend_file(blend_file_path)  # Assuming this function is defined elsewhere
+        pack_blend_file(blend_file_path)
         send_blend_file(server_url, blend_file_path, start_frame, end_frame)
 
     except ValueError:
