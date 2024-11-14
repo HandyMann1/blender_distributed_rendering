@@ -1,3 +1,6 @@
+import asyncio
+import json
+
 from fastapi import FastAPI, File, UploadFile, HTTPException, WebSocket
 from fastapi.responses import FileResponse
 import uvicorn
@@ -9,9 +12,23 @@ app = FastAPI()
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+filepath = None
+
+
+async def send_file(websocket, filename):
+    # Открываем указанный файл для чтения в бинарном режиме
+    with open(filename, 'rb') as file:
+        # Читаем содержимое файла как байты
+        file_content = file.read()
+    # Создаём словарь с именем файла и его содержимым для отправки
+    data_to_send = {"filename": filename, "content": list(file_content)}
+    # Превращаем словарь в строку JSON и отправляем её через WebSocket
+    await websocket.send(json.dumps(data_to_send))
+
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
+    global filepath
     if not file.filename:
         raise HTTPException(status_code=400, detail="No selected file")
 
@@ -20,7 +37,10 @@ async def upload_file(file: UploadFile = File(...)):
     with open(filepath, "wb") as buffer:
         buffer.write(await file.read())
 
-    #Тут должен быть код который разбивает файл на несколько файлов и рассылает его клиентам-обработчикам
+    # Тут должен быть код, который разбивает файл на несколько файлов и рассылает его клиентам-обработчикам
+
+    asyncio.sleep(2)
+    filepath = None
 
     # Отправляем файл обратно клиенту
     return FileResponse(filepath, media_type='application/octet-stream', filename=file.filename)
@@ -32,8 +52,8 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     while True:
         data = await websocket.receive_text()
-        print(data)
-        await websocket.send_text(f"Message text was: {data}")
+        if filepath is not None:
+            await send_file(websocket, filepath)
 
 
 if __name__ == '__main__':
