@@ -1,29 +1,40 @@
-from flask import Flask, request, send_file, jsonify
+from fastapi import FastAPI, File, UploadFile, HTTPException, WebSocket
+from fastapi.responses import FileResponse
+import uvicorn
 import os
 
-app = Flask(__name__)
+app = FastAPI()
 
 # Папка для сохранения загруженных файлов
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
-
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No selected file")
 
     # Сохраняем файл
     filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(filepath)
+    with open(filepath, "wb") as buffer:
+        buffer.write(await file.read())
+
+    #Тут должен быть код который разбивает файл на несколько файлов и рассылает его клиентам-обработчикам
 
     # Отправляем файл обратно клиенту
-    return send_file(filepath, as_attachment=True)
+    return FileResponse(filepath, media_type='application/octet-stream', filename=file.filename)
+
+
+@app.websocket('/ws')
+async def websocket_endpoint(websocket: WebSocket):
+    print(websocket)
+    await websocket.accept()
+    while True:
+        data = await websocket.receive_text()
+        print(data)
+        await websocket.send_text(f"Message text was: {data}")
 
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000)
+    uvicorn.run(app, host='127.0.0.1', port=5000)
