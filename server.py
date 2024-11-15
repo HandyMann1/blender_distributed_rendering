@@ -23,7 +23,7 @@ async def send_file(websocket, filename):
     # Создаём словарь с именем файла и его содержимым для отправки
     data_to_send = {"filename": filename, "content": list(file_content)}
     # Превращаем словарь в строку JSON и отправляем её через WebSocket
-    await websocket.send(json.dumps(data_to_send))
+    await websocket.send_json(json.dumps(data_to_send))
 
 
 @app.post("/upload")
@@ -39,22 +39,26 @@ async def upload_file(file: UploadFile = File(...)):
 
     # Тут должен быть код, который разбивает файл на несколько файлов и рассылает его клиентам-обработчикам
 
-    asyncio.sleep(2)
-    filepath = None
-
     # Отправляем файл обратно клиенту
-    return FileResponse(filepath, media_type='application/octet-stream', filename=file.filename)
+    resp = FileResponse(filepath, media_type='application/octet-stream', filename=file.filename)
+    return resp
 
 
 @app.websocket('/ws')
 async def websocket_endpoint(websocket: WebSocket):
+    global filepath
     print(websocket)
     await websocket.accept()
     while True:
-        data = await websocket.receive_text()
+        data = await websocket.receive()
+        if data["text"] == "ping":
+            await websocket.send_text("pong")
+        elif data:
+            print(data)
+            await websocket.send_text("server received")
         if filepath is not None:
             await send_file(websocket, filepath)
-
+            filepath = None
 
 if __name__ == '__main__':
     uvicorn.run(app, host='127.0.0.1', port=5000)
