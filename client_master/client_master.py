@@ -14,15 +14,13 @@ def send_blend_file(server_url, blend_file_path, start_frame, end_frame):
     }
 
     try:
-        response = requests.post(server_url, files=files, data=data)
+        response = requests.post(server_url, files=files, params=data)
 
         if response.status_code == 200:
             print("File uploaded successfully!")
-            print("Server response:", response.text)
             messagebox.showinfo("Success", "File uploaded successfully!")
         else:
             print(f"Failed to upload file. Status code: {response.status_code}")
-            print("Response:", response.text)
             messagebox.showerror("Error", f"Failed to upload file. Status code: {response.status_code}")
 
     except Exception as e:
@@ -37,6 +35,10 @@ def browse_files():
     )
     blend_file_path_entry.delete(0, tk.END)
     blend_file_path_entry.insert(0, filename)
+
+
+def download_rendered_frames():
+    pass
 
 
 def on_upload():
@@ -88,12 +90,12 @@ if __name__ == "__main__":
 
     default_end_frame = tk.IntVar(frame_selection_frame)
     default_end_frame.set(25)
-    end_frame_spinbox = tk.Spinbox(frame_selection_frame, from_=1, to=math.inf, width=5,textvariable=default_end_frame)
+    end_frame_spinbox = tk.Spinbox(frame_selection_frame, from_=1, to=math.inf, width=5, textvariable=default_end_frame)
     end_frame_spinbox.pack(side=tk.LEFT)
 
     frame_selection_frame.pack()
 
     upload_button = tk.Button(root, text="Upload Blend File", command=on_upload)
     upload_button.pack(pady=20)
-
+    download_frames_button = tk.Button(root, text="Download Rendered Frames", command=download_rendered_frames)
     root.mainloop()
