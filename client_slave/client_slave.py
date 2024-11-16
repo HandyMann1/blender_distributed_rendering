@@ -26,10 +26,10 @@ def upload_rendered_frame(file_path: str, frame_number: int, blend_file_path: st
         return False
     with open(file_path, 'rb') as f:
         files = {'file': f}
-        data = {'blend_file_path': blend_file_path}  # Send blend_file_path as form data
+        data = {'blend_file_path': blend_file_path}
 
         response = requests.post(f'{SERVER_URL}/upload_frame/{frame_number}', files=files,
-                                 data=data)  # Include additional data here)
+                                 data=data)
         print(f"Response Code: {response.status_code}")
         print(f"Response Content: {response.text}")
     return response.status_code == 200
