@@ -96,6 +96,7 @@ if __name__ == "__main__":
     frame_selection_frame.pack()
 
     upload_button = tk.Button(root, text="Upload Blend File", command=on_upload)
-    upload_button.pack(pady=20)
+    upload_button.pack(pady=10)
     download_frames_button = tk.Button(root, text="Download Rendered Frames", command=download_rendered_frames)
+    download_frames_button.pack(pady=5)
     root.mainloop()
