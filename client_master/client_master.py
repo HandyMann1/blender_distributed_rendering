@@ -1,18 +1,27 @@
 import math
+import threading
 
 import requests
 from launch_subcommand import pack_blend_file
 import tkinter as tk
 from tkinter import filedialog, messagebox
+import websockets
+import asyncio
+
+current_prj = {'file_name': None, 'start_frame': None,
+               'end_frame': None}
 
 
-def send_blend_file(server_url, blend_file_path, start_frame, end_frame):
+def send_blend_file(server_url, blend_file_path: str, start_frame, end_frame):
+    global current_prj
     files = {'file': open(blend_file_path, 'rb')}
     data = {
         'start_frame': start_frame,
         'end_frame': end_frame
     }
-
+    current_prj = {'file_name': blend_file_path.split("/")[-1], 'start_frame': data["start_frame"],
+                   'end_frame': data["end_frame"]}
+    print(current_prj)
     try:
         response = requests.post(server_url, files=files, params=data)
 
@@ -62,6 +71,19 @@ def on_upload():
         messagebox.showwarning("Warning", "Please enter valid frame numbers.")
 
 
+async def listen_for_updates():
+    async with websockets.connect('ws://localhost:5000/ws') as websocket:
+        while True:
+            message = await websocket.recv()
+            print("Received message:", message)
+
+
+def start_websocket_listener():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(listen_for_updates())
+
+
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Blend File Uploader")
@@ -99,4 +121,9 @@ if __name__ == "__main__":
     upload_button.pack(pady=10)
     download_frames_button = tk.Button(root, text="Download Rendered Frames", command=download_rendered_frames)
     download_frames_button.pack(pady=5)
+
+    websocket_thread = threading.Thread(target=start_websocket_listener)
+    websocket_thread.daemon = True
+    websocket_thread.start()
+
     root.mainloop()

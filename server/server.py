@@ -7,6 +7,8 @@ import os
 
 app = FastAPI()
 
+master_clients = []
+
 tasks = []
 task_num = 1
 task_num_lock = threading.Lock()
@@ -52,14 +54,17 @@ async def get_task():
     return HTTPException(status_code=204)
 
 
-@app.websocket('/ws')
+@app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    print(websocket)
     await websocket.accept()
-    while True:
-        data = await websocket.receive_text()
-        print(data)
-        await websocket.send_text(f"Message text was: {data}")
+    master_clients.append(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await websocket.send_text(f"Message text was: {data}")
+    except Exception as e:
+        print("WebSocket connection closed:", e)
+        master_clients.remove(websocket)
 
 
 @app.get("/download_blend/{filename}")
@@ -79,7 +84,20 @@ async def upload_frame(task_id: str, blend_file_path: str = Form(...), file: Upl
     file_location = os.path.join(directory_path, file.filename)
     with open(file_location, "wb") as f:
         f.write(await file.read())
+    for client in master_clients:
+        await client.send_text(f"New frame uploaded: {file.filename} for task {task_id}")
+
     return {"info": f"File '{file.filename}' uploaded successfully for task '{task_id}'"}
+
+
+@app.get("/get_rendered_frames")
+async def get_rendered_frames():
+    rendered_frames = []
+    for root, dirs, files in os.walk(UPLOAD_FOLDER):
+        for file in files:
+            if file.endswith(".png"):
+                rendered_frames.append(os.path.join(root, file))
+    return {"rendered_frames": rendered_frames}
 
 
 if __name__ == '__main__':
