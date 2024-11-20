@@ -1,4 +1,5 @@
 import math
+import os
 import threading
 
 import requests
@@ -23,7 +24,7 @@ def send_blend_file(server_url, blend_file_path: str, start_frame, end_frame):
                    'end_frame': data["end_frame"]}
     print(current_prj)
     try:
-        response = requests.post(server_url, files=files, params=data)
+        response = requests.post(server_url + "/upload", files=files, params=data)
 
         if response.status_code == 200:
             print("File uploaded successfully!")
@@ -47,8 +48,32 @@ def browse_files():
 
 
 def download_rendered_frames():
-    pass
+    if current_prj['file_name'] is not None:
+        response = requests.get(f'{server_url}/get_rendered_frames', params={'file_name': current_prj['file_name']})
+        if response.status_code == 200:
+            frames = response.json().get("rendered_frames", [])
+            print(f"Found {len(frames)} rendered frames.")
 
+            for frame in frames:
+                file_name = os.path.basename(frame)
+                base_directory = str(current_prj["file_name"]).split('.')[0]  # Get project name without .blend
+                os.makedirs(base_directory, exist_ok=True)
+
+                file_path = os.path.join(base_directory, file_name)
+
+                print(f"Downloading frame: {file_name} from {file_path}")
+
+                frame_response = requests.get(f'{server_url}/download_rendered/{file_path}')
+                if frame_response.status_code == 200:
+                    with open(file_path, 'wb') as f:
+                        f.write(frame_response.content)
+                    print(f"Downloaded {file_name} successfully.")
+                else:
+                    print(f"Failed to download {file_name}. Status code: {frame_response.status_code}")
+        else:
+            print(f"Failed to retrieve rendered frames. Status code: {response.status_code}")
+    else:
+        messagebox.showwarning("Warning", "Please, upload your .blend file")
 
 def on_upload():
     blend_file_path = blend_file_path_entry.get()
@@ -88,7 +113,7 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.title("Blend File Uploader")
 
-    server_url = 'http://localhost:5000/upload'
+    server_url = 'http://localhost:5000'
 
     # Label for file path entry
     blend_file_path_lbl = tk.Label(root, text="Enter .blend file path:")
