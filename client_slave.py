@@ -1,6 +1,8 @@
 import requests
 import subprocess
 import os
+import threading
+import time
 
 # URL сервера
 SERVER_URL = 'http://our/server'
@@ -8,7 +10,7 @@ SERVER_URL = 'http://our/server'
 # Директория для временного хранения файлов
 TEMP_DIR = 'temp'
 
-# Создаем директорию для временного хранения файлов, если она не существует
+# Если она не существует, создаём
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 def get_task():
@@ -32,7 +34,23 @@ def render_frame(blend_file, frame_number, output_file):
     ]
     subprocess.run(command, check=True)
 
+def send_heartbeat():
+    while True:
+        try:
+            response = requests.post(f'{SERVER_URL}/heartbeat')
+            if response.status_code == 200:
+                print('Heartbeat sent successfully.')
+            else:
+                print('Failed to send heartbeat.')
+        except requests.RequestException as e:
+            print(f'Heartbeat request failed: {e}')
+        time.sleep(10)  # 10 секунд
+
 def main():
+    heartbeat_thread = threading.Thread(target=send_heartbeat)  # Запускаем поток для отправки сердцебиения
+    heartbeat_thread.daemon = True
+    heartbeat_thread.start()
+
     while True:
         task = get_task()
         if task:
