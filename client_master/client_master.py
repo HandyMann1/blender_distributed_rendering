@@ -13,7 +13,7 @@ current_prj = {'file_name': None, 'start_frame': None,
                'end_frame': None}
 
 
-def send_blend_file(server_url, blend_file_path: str, start_frame, end_frame):
+def send_blend_file(list_of_servers, blend_file_path: str, start_frame, end_frame):
     global current_prj
     files = {'file': open(blend_file_path, 'rb')}
     data = {
@@ -24,14 +24,16 @@ def send_blend_file(server_url, blend_file_path: str, start_frame, end_frame):
                    'end_frame': data["end_frame"]}
     print(current_prj)
     try:
-        response = requests.post(server_url + "/upload", files=files, params=data)
+        for server_url in list_of_servers:
+            response = requests.post(server_url + "/upload", files=files, params=data)
 
-        if response.status_code == 200:
-            print("File uploaded successfully!")
-            messagebox.showinfo("Success", "File uploaded successfully!")
-        else:
-            print(f"Failed to upload file. Status code: {response.status_code}")
-            messagebox.showerror("Error", f"Failed to upload file. Status code: {response.status_code}")
+            if response.status_code == 200:
+                print("File uploaded successfully!")
+                messagebox.showinfo("Success", "File uploaded successfully!")
+                break
+            else:
+                print(f"{server_url} Failed to upload file. Status code: {response.status_code}")
+                messagebox.showerror("Error", f"Failed to upload file. Status code: {response.status_code}")
 
     except Exception as e:
         print("An error occurred:", e)
@@ -49,31 +51,34 @@ def browse_files():
 
 def download_rendered_frames():
     if current_prj['file_name'] is not None:
-        response = requests.get(f'{server_url}/get_rendered_frames', params={'file_name': current_prj['file_name']})
-        if response.status_code == 200:
-            frames = response.json().get("rendered_frames", [])
-            print(f"Found {len(frames)} rendered frames.")
+        for server_url in list_of_servers:
+            response = requests.get(f'{server_url}/get_rendered_frames', params={'file_name': current_prj['file_name']})
+            if response.status_code == 200:
+                frames = response.json().get("rendered_frames", [])
+                print(f"Found {len(frames)} rendered frames.")
 
-            for frame in frames:
-                file_name = os.path.basename(frame)
-                base_directory = str(current_prj["file_name"]).split('.')[0]  # Get project name without .blend
-                os.makedirs(base_directory, exist_ok=True)
+                for frame in frames:
+                    file_name = os.path.basename(frame)
+                    base_directory = str(current_prj["file_name"]).split('.')[0]  # Get project name without .blend
+                    os.makedirs(base_directory, exist_ok=True)
 
-                file_path = os.path.join(base_directory, file_name)
+                    file_path = os.path.join(base_directory, file_name)
 
-                print(f"Downloading frame: {file_name} from {file_path}")
+                    print(f"Downloading frame: {file_name} from {file_path}")
 
-                frame_response = requests.get(f'{server_url}/download_rendered/{file_path}')
-                if frame_response.status_code == 200:
-                    with open(file_path, 'wb') as f:
-                        f.write(frame_response.content)
-                    print(f"Downloaded {file_name} successfully.")
-                else:
-                    print(f"Failed to download {file_name}. Status code: {frame_response.status_code}")
-        else:
-            print(f"Failed to retrieve rendered frames. Status code: {response.status_code}")
+                    frame_response = requests.get(f'{server_url}/download_rendered/{file_path}')
+                    if frame_response.status_code == 200:
+                        with open(file_path, 'wb') as f:
+                            f.write(frame_response.content)
+                        print(f"Downloaded {file_name} successfully.")
+                    else:
+                        print(f"Failed to download {file_name}. Status code: {frame_response.status_code}")
+                break
+            else:
+                print(f"{server_url} Failed to retrieve rendered frames. Status code: {response.status_code}")
     else:
         messagebox.showwarning("Warning", "Please, upload your .blend file")
+
 
 def on_upload():
     blend_file_path = blend_file_path_entry.get()
@@ -90,17 +95,22 @@ def on_upload():
             return
 
         pack_blend_file(blend_file_path)
-        send_blend_file(server_url, blend_file_path, start_frame, end_frame)
+        send_blend_file(list_of_servers, blend_file_path, start_frame, end_frame)
 
     except ValueError:
         messagebox.showwarning("Warning", "Please enter valid frame numbers.")
 
 
 async def listen_for_updates():
-    async with websockets.connect('ws://localhost:5000/ws') as websocket:
-        while True:
-            message = await websocket.recv()
-            print("Received message:", message)
+    list_of_sockets = ['ws://localhost:5000/ws']
+    for socket in list_of_sockets:
+        try:
+            async with websockets.connect(socket) as websocket:
+                while True:
+                    message = await websocket.recv()
+                    print("Received message:", message)
+        except Exception:
+            print(socket, "unavailable!")
 
 
 def start_websocket_listener():
@@ -113,7 +123,7 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.title("Blend File Uploader")
 
-    server_url = 'http://localhost:5000'
+    list_of_servers = ['http://localhost:5000']
 
     # Label for file path entry
     blend_file_path_lbl = tk.Label(root, text="Enter .blend file path:")
