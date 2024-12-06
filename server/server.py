@@ -120,5 +120,10 @@ async def get_rendered_frames(file_name: str = None):
     return {"rendered_frames": rendered_frames}
 
 
+@app.post("/heartbeat")
+async def heartbeat():
+    return {"status": "alive"}
+
+
 if __name__ == '__main__':
     uvicorn.run(app, host='127.0.0.1', port=5000)

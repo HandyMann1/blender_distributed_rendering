@@ -1,16 +1,15 @@
+import asyncio
 import math
 import os
 import threading
-import requests
-from launch_subcommand import pack_blend_file
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox
+
+import requests
 import websockets
-import asyncio
 
-import threading
-import time
-
+from launch_subcommand import pack_blend_file
 
 
 def send_blend_file(server_url, blend_file_path: str, start_frame, end_frame):
@@ -75,6 +74,7 @@ def download_rendered_frames():
     else:
         messagebox.showwarning("Warning", "Please, upload your .blend file")
 
+
 def on_upload():
     blend_file_path = blend_file_path_entry.get()
     if not blend_file_path:
@@ -95,6 +95,7 @@ def on_upload():
     except ValueError:
         messagebox.showwarning("Warning", "Please enter valid frame numbers.")
 
+
 def send_heartbeat():
     while True:
         try:
@@ -106,6 +107,7 @@ def send_heartbeat():
         except requests.RequestException as e:
             print(f'Heartbeat request failed: {e}')
         time.sleep(10)  # Отправляем сердцебиение каждые 10 секунд
+
 
 async def listen_for_updates():
     async with websockets.connect('ws://localhost:5000/ws') as websocket:
@@ -126,7 +128,7 @@ if __name__ == "__main__":
 
     server_url = 'http://localhost:5000'
 
-    heartbeat_thread = threading.Thread(target=send_heartbeat)   # Запускаем поток для отправки сердцебиения
+    heartbeat_thread = threading.Thread(target=send_heartbeat)  # Запускаем поток для отправки сердцебиения
     heartbeat_thread.daemon = True
     heartbeat_thread.start()
 
