@@ -79,7 +79,7 @@ async def download_blend(filename: str):
 @app.get("/download_rendered/{filename}")
 async def download_rendered(filename: str):
     filepath = os.path.join(UPLOAD_FOLDER, filename)
-    print(f"Looking for file at: {filepath}")  # Debugging line
+    print(f"Looking for file at: {filepath}")
     if os.path.exists(filepath):
         return FileResponse(filepath)
     raise HTTPException(status_code=404, detail="File not found")
@@ -121,4 +121,4 @@ async def get_rendered_frames(file_name: str = None):
 
 
 if __name__ == '__main__':
-    uvicorn.run(app, host='127.0.0.1', port=5000)
+    uvicorn.run(app, host='0.0.0.0', port=5000)

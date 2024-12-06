@@ -24,16 +24,29 @@ def send_blend_file(list_of_servers, blend_file_path: str, start_frame, end_fram
                    'end_frame': data["end_frame"]}
     print(current_prj)
     try:
-        for server_url in list_of_servers:
-            response = requests.post(server_url + "/upload", files=files, params=data)
+        upload_success = False
 
-            if response.status_code == 200:
-                print("File uploaded successfully!")
-                messagebox.showinfo("Success", "File uploaded successfully!")
-                break
-            else:
-                print(f"{server_url} Failed to upload file. Status code: {response.status_code}")
-                messagebox.showerror("Error", f"Failed to upload file. Status code: {response.status_code}")
+        for server_url in list_of_servers:
+            try:
+                response = requests.post(server_url + "/upload", files=files, params=data)
+
+                if response.status_code == 200:
+                    print("File uploaded successfully!")
+                    messagebox.showinfo("Success", "File uploaded successfully!")
+                    upload_success = True
+                    break
+                # else:
+                #     print(f"{server_url} Failed to upload file. Status code: {response.status_code}")
+                #     messagebox.showerror("Error",
+                #                          f"Failed to upload file to {server_url}. Status code: {response.status_code}")
+
+            except requests.exceptions.RequestException as e:
+                print(f"Error connecting to {server_url}: {e}")
+                messagebox.showerror("Connection Error", f"Could not connect to {server_url}. Error: {e}")
+
+        # If no uploads were successful, notify the user
+        if not upload_success:
+            messagebox.showerror("Error", "All servers failed to upload the file.")
 
     except Exception as e:
         print("An error occurred:", e)
@@ -59,7 +72,7 @@ def download_rendered_frames():
 
                 for frame in frames:
                     file_name = os.path.basename(frame)
-                    base_directory = str(current_prj["file_name"]).split('.')[0]  # Get project name without .blend
+                    base_directory = str(current_prj["file_name"]).split('.')[0]
                     os.makedirs(base_directory, exist_ok=True)
 
                     file_path = os.path.join(base_directory, file_name)
@@ -102,15 +115,15 @@ def on_upload():
 
 
 async def listen_for_updates():
-    list_of_sockets = ['ws://localhost:5000/ws']
+    list_of_sockets = ['ws://localhost:5000/ws', 'ws://localhost:5001/ws', 'ws://localhost:5002/ws']
     for socket in list_of_sockets:
         try:
             async with websockets.connect(socket) as websocket:
                 while True:
                     message = await websocket.recv()
                     print("Received message:", message)
-        except Exception:
-            print(socket, "unavailable!")
+        except Exception as e:
+            print(f"Error connecting to {socket}: {e}")
 
 
 def start_websocket_listener():
@@ -123,7 +136,7 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.title("Blend File Uploader")
 
-    list_of_servers = ['http://localhost:5000']
+    list_of_servers = ['http://localhost:5000', 'http://localhost:5001', 'http://localhost:5002']
 
     # Label for file path entry
     blend_file_path_lbl = tk.Label(root, text="Enter .blend file path:")
