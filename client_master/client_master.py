@@ -101,11 +101,11 @@ def send_heartbeat():
         try:
             response = requests.post(f'{server_url}/heartbeat')
             if response.status_code == 200:
-                print('Heartbeat sent successfully.')
+                print(f'Heartbeat from {server_url} sent successfully.')
             else:
-                print('Failed to send heartbeat.')
+                print('Failed to send heartbeat from {server_url}.')
         except requests.RequestException as e:
-            print(f'Heartbeat request failed: {e}')
+            print(f'Heartbeat request from {server_url} failed: {e}')
         time.sleep(10)  # Отправляем сердцебиение каждые 10 секунд
 
 

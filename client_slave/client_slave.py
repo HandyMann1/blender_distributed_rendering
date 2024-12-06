@@ -1,83 +1,132 @@
-import requests
-import subprocess
 import os
+import subprocess
 import threading
 import time
 
-# URL сервера
-SERVER_URL = 'http://localhost:5000'
+import requests
 
-# Директория для временного хранения файлов
-TEMP_DIR = '../temp'
+LIST_OF_SERVER = ['http://localhost:5000', 'http://localhost:5001', 'http://localhost:5002']
 
-# Если она не существует, создаём
-os.makedirs(TEMP_DIR, exist_ok=True)
-
-def get_task():
-    response = requests.get(f'{SERVER_URL}/get_task')
-    if response.status_code == 200:
-        return response.json()
-    else:
-        return None
-
-def upload_rendered_frame(file_path, task_id):
-    files = {'file': open(file_path, 'rb')}
-    response = requests.post(f'{SERVER_URL}/upload_frame/{task_id}', files=files)
-    return response.status_code == 200
-
-def render_frame(blend_file, frame_number, output_file):
-    command = [
-        'blender',
-        '-b', blend_file,
-        '-o', output_file,
-        '-f', str(frame_number)
-    ]
-    subprocess.run(command, check=True)
 
 def send_heartbeat():
     while True:
+        for server_url in LIST_OF_SERVER:
+            try:
+                response = requests.post(f'{server_url}/heartbeat')
+                if response.status_code == 200:
+                    print(f'Heartbeat from {server_url} sent successfully.')
+                else:
+                    print('Failed to send heartbeat from {server_url}.')
+            except requests.RequestException as e:
+                print(f'Heartbeat request from {server_url} failed: {e}')
+            time.sleep(10)  # Отправляем сердцебиение каждые 10 секунд
+
+
+heartbeat_thread = threading.Thread(target=send_heartbeat)  # Запускаем поток для отправки сердцебиения
+heartbeat_thread.daemon = True
+heartbeat_thread.start()
+
+TEMP_DIR = os.path.join(os.getcwd(), "temp")
+
+os.makedirs(TEMP_DIR, exist_ok=True)
+
+
+def get_task():
+    for server_url in LIST_OF_SERVER:
         try:
-            response = requests.post(f'{SERVER_URL}/heartbeat')
+            response = requests.get(f'{server_url}/get_task')
             if response.status_code == 200:
-                print('Heartbeat sent successfully.')
+                print(f"Task received from {server_url}: {response.json()}")
+                return response.json()
             else:
-                print('Failed to send heartbeat.')
-        except requests.RequestException as e:
-            print(f'Heartbeat request failed: {e}')
-        time.sleep(10)  # 10 секунд
+                print(f"{server_url} returned status code {response.status_code}. Trying next server...")
+        except requests.exceptions.RequestException as e:
+            print(f"Error connecting to {server_url}")
+
+    print("All servers failed to provide a task.")
+    return None
+
+
+def upload_rendered_frame(file_path: str, frame_number: int, blend_file_path: str):
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        return False
+
+    with open(file_path, 'rb') as f:
+        files = {'file': f}
+        data = {'blend_file_path': blend_file_path}
+
+        for server_url in LIST_OF_SERVER:
+            try:
+                response = requests.post(f'{server_url}/upload_frame/{frame_number}', files=files, data=data)
+                if response.status_code == 200:
+                    print(f"Uploaded frame {frame_number} successfully to {server_url}.")
+                    return True
+                else:
+                    print(f"{server_url} returned status code {response.status_code}. Trying next server...")
+            except requests.exceptions.RequestException as e:
+                print(f"Error connecting to {server_url}: {e}")
+
+    print(f"Failed to upload frame {frame_number} after trying all servers.")
+    return False
+
+
+def render_frame(blend_file, frame_number):
+    command = [
+        'blender',
+        '-b', blend_file,
+        '-o', os.path.join(TEMP_DIR, "frame_####"), "-F", "PNG",
+        '-f', str(frame_number)
+    ]
+
+    try:
+        result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print("Standard Output:", result.stdout.decode())
+        print("Standard Error:", result.stderr.decode())
+    except subprocess.CalledProcessError as e:
+        print(f"An error occurred while rendering: {e}")
+
 
 def main():
-    heartbeat_thread = threading.Thread(target=send_heartbeat)  # Запускаем поток для отправки сердцебиения
-    heartbeat_thread.daemon = True
-    heartbeat_thread.start()
-
     while True:
         task = get_task()
         if task:
-            blend_file = task['blend_file']
-            frame_number = task['frame_number']
-            task_id = task['task_id']
+            required_keys = ['blend_file', 'frame_number', 'task_id']
+            if all(key in task for key in required_keys):
+                blend_file = task['blend_file']
+                frame_number = task['frame_number']
+                task_id = task['task_id']
+                print(f"Working on task: {task_id}")
 
-            response = requests.get(f'{SERVER_URL}/download_blend/{blend_file}')            # Скачиваем .blend файл
-            if response.status_code == 200:
-                blend_file_path = os.path.join(TEMP_DIR, blend_file)
-                with open(blend_file_path, 'wb') as f:
-                    f.write(response.content)
+                for server_url in LIST_OF_SERVER:
+                    try:
+                        response = requests.get(f'{server_url}/download_blend/{blend_file}')
+                        if response.status_code == 200:
+                            print(f"blend file path: {blend_file}")
+                            blend_file_path = os.path.join(TEMP_DIR, blend_file)
+                            with open(blend_file_path, 'wb') as f:
+                                f.write(response.content)
 
-                output_file = os.path.join(TEMP_DIR, f'frame_{frame_number}.png')    # Рендер
-                render_frame(blend_file_path, frame_number, output_file)
+                            render_frame(blend_file_path, frame_number)
 
-                if upload_rendered_frame(output_file, task_id):                # Возвращаем отрендеренный кадр на сервер
-                    print(f'Frame {frame_number} rendered and uploaded successfully.')
-                else:
-                    print(f'Failed to upload frame {frame_number}.')
+                            output_file = os.path.join(TEMP_DIR, f'frame_{frame_number:04d}.png')
+                            base_filename = str(os.path.splitext(blend_file)[0])
+                            if upload_rendered_frame(output_file, frame_number, base_filename):
+                                print(f'Frame {frame_number} rendered and uploaded successfully.')
+                            else:
+                                print(f'Failed to upload frame {frame_number}.')
+                            break
+                        else:
+                            print(
+                                f'{server_url} failed to download blend file: {blend_file}. Status code: {response.status_code}')
+                    except requests.exceptions.RequestException as e:
+                        print(f"Error connecting to {server_url}")
 
-                os.remove(blend_file_path)                # Удаляем временные файлы
-                os.remove(output_file)
             else:
-                print(f'Failed to download blend file: {blend_file}')
+                print('No tasks available.')
         else:
-            print('No tasks available.')
+            print("All servers failed to provide a task.")
+
 
 if __name__ == '__main__':
     main()
