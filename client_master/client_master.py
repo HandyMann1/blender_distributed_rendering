@@ -11,8 +11,11 @@ import websockets
 
 from launch_subcommand import pack_blend_file
 
+LIST_OF_SERVER = ['http://localhost:5000', 'http://localhost:5001', 'http://localhost:5002']
+LIST_OF_SOCKET = ['ws://localhost:5000/ws', 'ws://localhost:5001/ws', 'ws://localhost:5002/ws']
 
-def send_blend_file(server_url, blend_file_path: str, start_frame, end_frame):
+
+def send_blend_file(blend_file_path: str, start_frame, end_frame):
     global current_prj
     files = {'file': open(blend_file_path, 'rb')}
     data = {
@@ -23,14 +26,18 @@ def send_blend_file(server_url, blend_file_path: str, start_frame, end_frame):
                    'end_frame': data["end_frame"]}
     print(current_prj)
     try:
-        response = requests.post(server_url + "/upload", files=files, params=data)
+        for server_url in LIST_OF_SERVER:
+            try:
+                response = requests.post(server_url + "/upload", files=files, params=data)
 
-        if response.status_code == 200:
-            print("File uploaded successfully!")
-            messagebox.showinfo("Success", "File uploaded successfully!")
-        else:
-            print(f"Failed to upload file. Status code: {response.status_code}")
-            messagebox.showerror("Error", f"Failed to upload file. Status code: {response.status_code}")
+                if response.status_code == 200:
+                    print("File uploaded successfully!")
+                    messagebox.showinfo("Success", "File uploaded successfully!")
+                else:
+                    print(f"Failed to upload file. Status code: {response.status_code}")
+                    messagebox.showerror("Error", f"Failed to upload file. Status code: {response.status_code}")
+            except requests.RequestException as e:
+                print(f'Send file request from {server_url} failed: {e}')
 
     except Exception as e:
         print("An error occurred:", e)
@@ -48,29 +55,34 @@ def browse_files():
 
 def download_rendered_frames():
     if current_prj['file_name'] is not None:
-        response = requests.get(f'{server_url}/get_rendered_frames', params={'file_name': current_prj['file_name']})
-        if response.status_code == 200:
-            frames = response.json().get("rendered_frames", [])
-            print(f"Found {len(frames)} rendered frames.")
+        for server_url in LIST_OF_SERVER:
+            try:
+                response = requests.get(f'{server_url}/get_rendered_frames',
+                                        params={'file_name': current_prj['file_name']})
+                if response.status_code == 200:
+                    frames = response.json().get("rendered_frames", [])
+                    print(f"Found {len(frames)} rendered frames.")
 
-            for frame in frames:
-                file_name = os.path.basename(frame)
-                base_directory = str(current_prj["file_name"]).split('.')[0]  # Get project name without .blend
-                os.makedirs(base_directory, exist_ok=True)
+                    for frame in frames:
+                        file_name = os.path.basename(frame)
+                        base_directory = str(current_prj["file_name"]).split('.')[0]  # Get project name without .blend
+                        os.makedirs(base_directory, exist_ok=True)
 
-                file_path = os.path.join(base_directory, file_name)
+                        file_path = os.path.join(base_directory, file_name)
 
-                print(f"Downloading frame: {file_name} from {file_path}")
+                        print(f"Downloading frame: {file_name} from {file_path}")
 
-                frame_response = requests.get(f'{server_url}/download_rendered/{file_path}')
-                if frame_response.status_code == 200:
-                    with open(file_path, 'wb') as f:
-                        f.write(frame_response.content)
-                    print(f"Downloaded {file_name} successfully.")
+                        frame_response = requests.get(f'{server_url}/download_rendered/{file_path}')
+                        if frame_response.status_code == 200:
+                            with open(file_path, 'wb') as f:
+                                f.write(frame_response.content)
+                            print(f"Downloaded {file_name} successfully.")
+                        else:
+                            print(f"Failed to download {file_name}. Status code: {frame_response.status_code}")
                 else:
-                    print(f"Failed to download {file_name}. Status code: {frame_response.status_code}")
-        else:
-            print(f"Failed to retrieve rendered frames. Status code: {response.status_code}")
+                    print(f"Failed to retrieve rendered frames. Status code: {response.status_code}")
+            except requests.RequestException as e:
+                print(f'Download request from {server_url} failed: {e}')
     else:
         messagebox.showwarning("Warning", "Please, upload your .blend file")
 
@@ -90,7 +102,7 @@ def on_upload():
             return
 
         pack_blend_file(blend_file_path)
-        send_blend_file(server_url, blend_file_path, start_frame, end_frame)
+        send_blend_file(blend_file_path, start_frame, end_frame)
 
     except ValueError:
         messagebox.showwarning("Warning", "Please enter valid frame numbers.")
@@ -98,22 +110,28 @@ def on_upload():
 
 def send_heartbeat():
     while True:
-        try:
-            response = requests.post(f'{server_url}/heartbeat')
-            if response.status_code == 200:
-                print(f'Heartbeat from {server_url} sent successfully.')
-            else:
-                print('Failed to send heartbeat from {server_url}.')
-        except requests.RequestException as e:
-            print(f'Heartbeat request from {server_url} failed: {e}')
+        for server_url in LIST_OF_SERVER:
+            try:
+                response = requests.post(f'{server_url}/heartbeat')
+                if response.status_code == 200:
+                    print(f'Heartbeat from {server_url} sent successfully.')
+                else:
+                    print('Failed to send heartbeat from {server_url}.')
+            except requests.RequestException as e:
+                print(f'Heartbeat request from {server_url} failed: {e}')
         time.sleep(10)  # Отправляем сердцебиение каждые 10 секунд
 
 
 async def listen_for_updates():
-    async with websockets.connect('ws://localhost:5000/ws') as websocket:
-        while True:
-            message = await websocket.recv()
-            print("Received message:", message)
+    while True:
+        for socket in LIST_OF_SOCKET:
+            try:
+                async with websockets.connect(socket) as websocket:
+                    while True:
+                        message = await websocket.recv()
+                        print("Received message:", message)
+            except Exception as e:
+                print(f'Listen socket from {socket} failed: {e}')
 
 
 def start_websocket_listener():
@@ -125,8 +143,6 @@ def start_websocket_listener():
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Blend File Uploader")
-
-    server_url = 'http://localhost:5000'
 
     heartbeat_thread = threading.Thread(target=send_heartbeat)  # Запускаем поток для отправки сердцебиения
     heartbeat_thread.daemon = True
